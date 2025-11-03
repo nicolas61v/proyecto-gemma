@@ -78,3 +78,11 @@ logs/
 tmp/
 temp/
 .tmp/
+
+# Índices FAISS generados (se regeneran con build_index.py)
+knowledge_index.faiss
+knowledge_embeddings.npy
+knowledge_metadata.json
+
+# Claude Code
+.claude/
