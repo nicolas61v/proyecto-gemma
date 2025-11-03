@@ -1,0 +1,19 @@
+gradio>=4.0.0
+transformers>=4.45.0
+torch>=2.0.0
+accelerate>=0.25.0
+huggingface_hub>=0.20.0
+sentencepiece>=0.1.99
+protobuf>=3.20.0
+
+# Added for local retrieval (RAG) and optional QLoRA fine-tuning
+sentence-transformers>=2.2.2
+faiss-cpu>=1.7.4
+peft>=0.4.0
+bitsandbytes>=0.39.0
+
+# For PDF reading
+pypdf>=3.12.0
+
+# Notes: bitsandbytes may have limited Windows support; for QLoRA training on Windows
+# prefer using WSL2 with GPU passthrough or a Linux machine with NVIDIA CUDA drivers.

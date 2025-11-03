@@ -69,7 +69,6 @@ huggingface-cli login
 1. Ve a https://huggingface.co/settings/tokens
 2. Crea un nuevo token (read)
 3. Pegalo en la terminal
-4. u usa esta REDACTED
 
 ### 4️⃣ Ejecutar la Aplicación
 
@@ -344,4 +343,3 @@ Para problemas o preguntas:
 5. ✅ ¡Sube a GitHub!
 
 **¡Disfruta tu chatbot local! 🎉**
-"# proyecto-gemma" 
