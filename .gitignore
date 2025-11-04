@@ -98,6 +98,13 @@ diagnose_*.py
 # Scripts de fine-tuning QLora (funcionalidad opcional/experimental)
 qlora_finetune.py
 
+# Scripts de indexación redundantes (la UI ya lo hace)
+build_index.py
+index_knowledge.py
+
+# Scripts de testing (solo para desarrollo/debug)
+test_rag.py
+
 # Documentación INTERNA de desarrollo (NO para público)
 FIXES_RAG_RESPONSES.md
 CAMBIOS_AGRESIVOS_GEMMA.md
