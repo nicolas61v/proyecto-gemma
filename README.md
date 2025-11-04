@@ -125,6 +125,16 @@ python gemma3_270m_chat.py
 
 La aplicación utilizará automáticamente los modelos cacheados en su sistema. Los modelos están almacenados en `~/.cache/huggingface/hub/` y se cargan desde esa ubicación sin necesidad de internet.
 
+### Verificar Configuración Offline
+
+Para verificar que su sistema está correctamente configurado para funcionar sin internet, puede ejecutar:
+
+```bash
+python test_offline.py
+```
+
+Este script verificará que todos los modelos estén presentes y funcionando en modo offline.
+
 ### Solución de Problemas Offline
 
 Si obtiene un error relacionado con la descarga de modelos mientras está desconectado:
@@ -133,6 +143,7 @@ Si obtiene un error relacionado con la descarga de modelos mientras está descon
 2. Verifique que el proceso completó sin errores
 3. Confirme que tiene espacio en disco disponible (mínimo 500 MB)
 4. Revise que la carpeta `~/.cache/huggingface/hub/` existe con los modelos descargados
+5. Ejecute `python test_offline.py` para diagnosticar el problema
 
 ---
 
