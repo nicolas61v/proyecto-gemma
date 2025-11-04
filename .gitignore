@@ -95,14 +95,15 @@ knowledge_metadata.json
 debug_*.py
 diagnose_*.py
 
-# Documentación interna de desarrollo y arreglos
+# Documentación INTERNA de desarrollo (NO para público)
 FIXES_RAG_RESPONSES.md
 CAMBIOS_AGRESIVOS_GEMMA.md
 ANALISIS_PROYECTO.md
 MEJORAS_RESPUESTAS.md
+GITIGNORE_EXPLICADO.md
 
-# Accesos directos Windows creados localmente (opcional)
-# *.lnk  (ya está arriba pero aquí por claridad)
+# Accesos directos Windows creados localmente
+*.lnk
 
 # Archivos de caché/estado local
 *.pkl
@@ -113,6 +114,14 @@ MEJORAS_RESPUESTAS.md
 .ipynb_checkpoints/
 *.ipynb_checkpoints/
 
-# Archivos de LLaMA/modelos que se descargan localmente
+# Archivos de modelos/adapters descargados localmente
 lora_adapter/
 *.gguf
+*.bin
+*.safetensors
+
+# Archivos temporales
+*.tmp
+*.temp
+*_temp.py
+*_backup.*
