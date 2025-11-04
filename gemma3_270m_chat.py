@@ -232,13 +232,13 @@ Evita respuestas confusas o incoherentes."""
                 embed_model = SentenceTransformer(EMBED_MODEL_NAME)
                 index = faiss.read_index(FAISS_INDEX_PATH)
                 q_emb = embed_model.encode([message])
-                # Buscar top-2 documentos (más conservador)
-                D, I = index.search(np.array(q_emb).astype('float32'), 2)
+                # Buscar top-3 documentos (menos conservador)
+                D, I = index.search(np.array(q_emb).astype('float32'), 3)
                 with open(METADATA_PATH, 'r', encoding='utf-8') as f:
                     metadata = json.load(f)
-                # Solo incluir si la distancia es razonable
+                # Incluir resultados con distancia más permisiva
                 for dist, idx in zip(D[0], I[0]):
-                    if idx < len(metadata) and dist < 2.5:  # Threshold de relevancia
+                    if idx < len(metadata) and dist < 3.0:  # Threshold aumentado a 3.0
                         entry = metadata[idx]
                         source = entry.get('source', 'unknown')
                         text = entry.get('text', '')
@@ -251,18 +251,21 @@ Evita respuestas confusas o incoherentes."""
 
     # Agregar contexto RAG si está disponible
     if context_text:
-        prompt += f"Información de referencia:\n{context_text}\n"
+        prompt += f"INFORMACIÓN DE REFERENCIA RELEVANTE:\n{context_text}\n"
+        prompt += "Usa la información anterior para responder la pregunta del usuario.\n\n"
+    else:
+        prompt += "No hay documentos disponibles para consultar.\n\n"
 
     # Agregar historial limitado
     if len(history) > 0:
-        prompt += "Conversación anterior:\n"
+        prompt += "CONVERSACIÓN ANTERIOR:\n"
         for user_msg, bot_msg in history[-2:]:  # Solo últimos 2 intercambios
             prompt += f"Usuario: {user_msg}\n"
             prompt += f"Asistente: {bot_msg}\n"
+        prompt += "\n"
 
     # Agregar mensaje actual
-    prompt += f"\nUsuario: {message}\n"
-    prompt += "Asistente:"
+    prompt += f"Usuario: {message}\nAsistente:"
 
     # Tokenizar con truncation cuidadosa
     inputs = tokenizer(
@@ -276,15 +279,16 @@ Evita respuestas confusas o incoherentes."""
     with torch.no_grad():
         outputs = model.generate(
             **inputs,
-            max_new_tokens=min(max_tokens, 200),  # Limitar para respuestas coherentes
-            temperature=min(temperature, 0.6),     # Reducir por defecto para coherencia
+            max_new_tokens=min(max_tokens, 250),  # Permitir respuestas más largas
+            temperature=min(temperature, 0.5),    # Reducir para mayor consistencia
             do_sample=True,
-            top_p=0.9,                             # Más restrictivo
-            top_k=40,                              # Más restrictivo
+            top_p=0.85,                           # Slightly más restrictivo
+            top_k=30,                             # Más restrictivo que antes
             pad_token_id=tokenizer.eos_token_id,
             eos_token_id=tokenizer.eos_token_id,
-            repetition_penalty=1.2,                # Evitar repeticiones
-            no_repeat_ngram_size=3                 # No repetir 3-gramas
+            repetition_penalty=1.1,               # Ligero penalty
+            no_repeat_ngram_size=2,               # No repetir bigramas
+            length_penalty=1.0                    # Neutral en longitud
         )
 
     # Decodificar respuesta
@@ -296,17 +300,32 @@ Evita respuestas confusas o incoherentes."""
     else:
         response = full_response[len(prompt):].strip()
 
-    # Limpiar (quitar "Usuario:" si aparece)
+    # Limpiar (quitar "Usuario:" o referencias a sistema si aparecen)
     if "Usuario:" in response:
         response = response.split("Usuario:")[0].strip()
 
-    # Validación básica: si la respuesta es muy corta o vacía, dar respuesta por defecto
-    if not response or len(response) < 5:
-        response = "No pude generar una respuesta coherente. Intenta reformular tu pregunta."
+    # Quitar prompts residuales
+    for phrase in ["INFORMACIÓN DE REFERENCIA", "CONVERSACIÓN ANTERIOR", "Asistente:", "[INST]", "[/INST]"]:
+        if phrase in response:
+            response = response.split(phrase)[0].strip()
 
-    # Limitar a 500 caracteres para evitar respuestas demasiado largas
-    if len(response) > 500:
-        response = response[:500] + "..."
+    # Limpieza de espacios múltiples
+    response = " ".join(response.split())
+
+    # Validación: respuesta debe ser significativa
+    if not response or len(response.strip()) < 5:
+        if context_text:
+            response = "Lo siento, no pude generar una respuesta basada en los documentos disponibles. Intenta con una pregunta más específica."
+        else:
+            response = "No tengo documentos cargados para responder. Por favor, carga un PDF usando el botón 'Indexar'."
+    elif any(phrase in response.lower() for phrase in ["no tengo información", "no sé", "no disponible"]):
+        # Detectar cuando el modelo dice que no sabe
+        if context_text:
+            response = "Disculpa, aunque tengo información relacionada, no puedo formular una respuesta clara. Intenta reformular tu pregunta."
+
+    # Limitar a 600 caracteres para respuestas más completas
+    if len(response) > 600:
+        response = response[:600].rsplit(" ", 1)[0] + "..."
 
     return response
 
