@@ -16,6 +16,10 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 import warnings
 warnings.filterwarnings('ignore')
 
+# Configurar para usar cache local y offline si es posible
+os.environ['HF_HUB_OFFLINE'] = '1'
+os.environ['TRANSFORMERS_OFFLINE'] = '1'
+
 # Optional libraries for RAG and LoRA
 try:
     from sentence_transformers import SentenceTransformer
@@ -223,12 +227,21 @@ def chat_with_gemma(message, history, temperature, max_tokens):
 Responde siempre de manera clara y directa.
 Usa la información disponible para responder."""
 
-    # Recuperación RAG mejorada - Más agresivo
+    # Recuperación RAG mejorada - Con soporte offline
     context_text = ""
     if SentenceTransformer is not None and faiss is not None and np is not None:
         try:
             if os.path.exists(FAISS_INDEX_PATH) and os.path.exists(METADATA_PATH):
-                embed_model = SentenceTransformer(EMBED_MODEL_NAME)
+                # Intentar usar cache local, sino descargará si hay internet
+                try:
+                    embed_model = SentenceTransformer(
+                        EMBED_MODEL_NAME,
+                        cache_folder=os.path.join(os.path.dirname(__file__), 'models_cache')
+                    )
+                except:
+                    # Fallback: intentar sin especificar cache
+                    embed_model = SentenceTransformer(EMBED_MODEL_NAME)
+
                 index = faiss.read_index(FAISS_INDEX_PATH)
                 q_emb = embed_model.encode([message])
                 # Buscar top-2 documentos
@@ -243,7 +256,9 @@ Usa la información disponible para responder."""
                         # Limitar tamaño de cada chunk para evitar que sea muy largo
                         text = text[:300]  # Máximo 300 chars por chunk
                         context_text += f"{text}\n"
-        except Exception:
+        except Exception as e:
+            # Si falla, mostrar mensaje pero no detener la app
+            print(f"Aviso: No se pudo cargar embeddings para RAG: {str(e)}")
             context_text = ""
 
     # Construir prompt SIMPLE y CORTO

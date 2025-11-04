@@ -95,6 +95,47 @@ http://127.0.0.1:7860
 
 ---
 
+## Configuración Offline
+
+Para usar la aplicación sin conexión a internet después de la descarga inicial, ejecute el script `descargar_modelos.py` una sola vez mientras tenga conexión a internet:
+
+### Paso 1: Descargar Modelos (Requiere Internet)
+
+```bash
+python descargar_modelos.py
+```
+
+Este script descargará y cacheará ambos modelos necesarios:
+- Modelo principal: `google/gemma-3-270m-it` (aproximadamente 241 MB)
+- Modelo de embeddings: `all-MiniLM-L6-v2` (aproximadamente 100 MB)
+
+El proceso tarda entre 5-10 minutos dependiendo de la velocidad de internet.
+
+### Paso 2: Usar sin Internet
+
+Una vez completada la descarga, podrá usar la aplicación sin conexión a internet:
+
+```bash
+# Windows
+ejecutar_gemma3.bat
+
+# Linux/macOS
+python gemma3_270m_chat.py
+```
+
+La aplicación utilizará automáticamente los modelos cacheados en su sistema. Los modelos están almacenados en `~/.cache/huggingface/hub/` y se cargan desde esa ubicación sin necesidad de internet.
+
+### Solución de Problemas Offline
+
+Si obtiene un error relacionado con la descarga de modelos mientras está desconectado:
+
+1. Asegúrese de haber ejecutado `descargar_modelos.py` previamente con conexión a internet
+2. Verifique que el proceso completó sin errores
+3. Confirme que tiene espacio en disco disponible (mínimo 500 MB)
+4. Revise que la carpeta `~/.cache/huggingface/hub/` existe con los modelos descargados
+
+---
+
 ## Funcionalidades
 
 ### 1. Chat Interactivo
