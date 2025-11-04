@@ -79,10 +79,16 @@ tmp/
 temp/
 .tmp/
 
-# Índices FAISS generados (se regeneran con build_index.py)
+# Índices FAISS generados (se regeneran al usar la UI)
 knowledge_index.faiss
 knowledge_embeddings.npy
 knowledge_metadata.json
+
+# Directorio de documentos del usuario (debe estar vacío en el repo)
+knowledge/
+
+# Caché de modelos descargados (se descargan con descargar_modelos.py)
+models_cache/
 
 # Claude Code
 .claude/
@@ -101,9 +107,6 @@ qlora_finetune.py
 # Scripts de indexación redundantes (la UI ya lo hace)
 build_index.py
 index_knowledge.py
-
-# Scripts de testing (solo para desarrollo/debug)
-test_rag.py
 
 # Documentación INTERNA de desarrollo (NO para público)
 FIXES_RAG_RESPONSES.md
