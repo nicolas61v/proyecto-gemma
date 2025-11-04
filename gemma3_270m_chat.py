@@ -16,9 +16,11 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 import warnings
 warnings.filterwarnings('ignore')
 
-# Configurar para usar cache local y offline si es posible
+# Configurar para usar cache local - desactivamos intentos de descarga en línea
+# Esto previene que se intente descargar modelos si no hay internet
 os.environ['HF_HUB_OFFLINE'] = '1'
 os.environ['TRANSFORMERS_OFFLINE'] = '1'
+os.environ['SENTENCE_TRANSFORMERS_HOME'] = os.path.expanduser('~/.cache/huggingface/hub')
 
 # Optional libraries for RAG and LoRA
 try:
@@ -232,33 +234,38 @@ Usa la información disponible para responder."""
     if SentenceTransformer is not None and faiss is not None and np is not None:
         try:
             if os.path.exists(FAISS_INDEX_PATH) and os.path.exists(METADATA_PATH):
-                # Intentar usar cache local, sino descargará si hay internet
+                # Cargar embeddings desde cache LOCAL sin intentar descargar
+                # Esto permite funcionalidad offline completa
                 try:
+                    # Usar cache_folder para apuntar al directorio correcto
+                    # Forzar que no intente descargar con local_files_only=True
                     embed_model = SentenceTransformer(
                         EMBED_MODEL_NAME,
-                        cache_folder=os.path.join(os.path.dirname(__file__), 'models_cache')
+                        cache_folder=os.path.expanduser('~/.cache/huggingface/hub'),
+                        local_files_only=True  # CRÍTICO: Solo usar archivos locales
                     )
-                except:
-                    # Fallback: intentar sin especificar cache
-                    embed_model = SentenceTransformer(EMBED_MODEL_NAME)
 
-                index = faiss.read_index(FAISS_INDEX_PATH)
-                q_emb = embed_model.encode([message])
-                # Buscar top-2 documentos
-                D, I = index.search(np.array(q_emb).astype('float32'), 2)
-                with open(METADATA_PATH, 'r', encoding='utf-8') as f:
-                    metadata = json.load(f)
-                # Incluir TODOS los resultados relevantes (muy permisivo)
-                for dist, idx in zip(D[0], I[0]):
-                    if idx < len(metadata):
-                        entry = metadata[idx]
-                        text = entry.get('text', '')
-                        # Limitar tamaño de cada chunk para evitar que sea muy largo
-                        text = text[:300]  # Máximo 300 chars por chunk
-                        context_text += f"{text}\n"
+                    index = faiss.read_index(FAISS_INDEX_PATH)
+                    q_emb = embed_model.encode([message])
+                    # Buscar top-2 documentos
+                    D, I = index.search(np.array(q_emb).astype('float32'), 2)
+                    with open(METADATA_PATH, 'r', encoding='utf-8') as f:
+                        metadata = json.load(f)
+                    # Incluir TODOS los resultados relevantes (muy permisivo)
+                    for dist, idx in zip(D[0], I[0]):
+                        if idx < len(metadata):
+                            entry = metadata[idx]
+                            text = entry.get('text', '')
+                            # Limitar tamaño de cada chunk para evitar que sea muy largo
+                            text = text[:300]  # Máximo 300 chars por chunk
+                            context_text += f"{text}\n"
+                except Exception as e:
+                    # Si falla (ej: modelo no descargado aún), continuar sin RAG
+                    print(f"Aviso: RAG no disponible - {str(e)[:100]}")
+                    print("       (Ejecuta: python descargar_modelos.py para descargar)")
+                    context_text = ""
         except Exception as e:
-            # Si falla, mostrar mensaje pero no detener la app
-            print(f"Aviso: No se pudo cargar embeddings para RAG: {str(e)}")
+            # Fallback por si hay error en cualquier parte del RAG
             context_text = ""
 
     # Construir prompt SIMPLE y CORTO
