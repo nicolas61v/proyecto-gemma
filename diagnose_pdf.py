@@ -5,7 +5,7 @@ from pypdf import PdfReader
 import pathlib
 import os
 
-pdf_path = 'knowledge/LAB-Introducción-a-MikroTik-RouterOS-v6.35.4.01.pdf'
+pdf_path = 'knowledge/ai-article.pdf'  # Cambiar por la ruta del PDF a diagnosticar
 
 print("=" * 60)
 print("DIAGNOSTICO DE EXTRACCION DE PDF")

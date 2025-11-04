@@ -353,7 +353,11 @@ with gr.Blocks(
 
             with gr.Row():
                 file_input = gr.File(label="Archivo (txt, md, pdf)")
-                upload_btn = gr.Button("Indexar", scale=1)
+                upload_btn = gr.Button("Subir e Indexar", scale=1)
+
+            with gr.Row():
+                rebuild_btn = gr.Button("Reconstruir Índice (archivos en knowledge/)", scale=2, variant="secondary")
+
             index_status = gr.Markdown(visible=True)
 
             with gr.Row():
@@ -433,15 +437,34 @@ with gr.Blocks(
     def upload_and_index(uploaded_file):
         """Callback para guardar y construir el índice FAISS con el archivo subido."""
         if not uploaded_file:
-            return "No se recibió archivo."
+            return "No se recibió archivo. Presiona 'Reconstruir Índice' para indexar archivos existentes en knowledge/"
         saved = save_uploaded_file(uploaded_file)
         if not saved:
             return "No se pudo guardar el archivo subido."
         try:
             build_faiss_index(KNOWLEDGE_DIR)
-            return f"Archivo guardado en `{saved}` y índice construido/actualizado."
+            return f"✓ Archivo guardado e índice actualizado correctamente.\n\nArchivos indexados: {len(pathlib.Path(KNOWLEDGE_DIR).glob('**/*'))}"
         except Exception as e:
             return f"Error construyendo índice: {e}"
+
+    def rebuild_index():
+        """Callback para reconstruir el índice con los archivos existentes en knowledge/"""
+        try:
+            knowledge_path = pathlib.Path(KNOWLEDGE_DIR)
+            if not knowledge_path.exists():
+                return "La carpeta 'knowledge/' no existe aún. Sube un archivo primero."
+
+            files = list(knowledge_path.glob("**/*"))
+            files = [f for f in files if f.is_file()]
+
+            if not files:
+                return "No hay archivos en la carpeta 'knowledge/'. Sube un PDF, TXT o MD."
+
+            build_faiss_index(KNOWLEDGE_DIR)
+            num_files = len(files)
+            return f"✓ Índice reconstruido exitosamente!\n\nArchivos procesados: {num_files}\nTotal chunks indexados: (verifica con diagnose_rag.py)"
+        except Exception as e:
+            return f"Error reconstruyendo índice: {str(e)}"
     
     def retry_last(chat_history, temp, tokens):
         if not chat_history:
@@ -470,7 +493,13 @@ with gr.Blocks(
         inputs=[file_input],
         outputs=[index_status]
     )
-    
+
+    rebuild_btn.click(
+        rebuild_index,
+        inputs=[],
+        outputs=[index_status]
+    )
+
     clear_btn.click(lambda: [], outputs=chatbot)
     
     retry_btn.click(
