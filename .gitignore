@@ -95,12 +95,18 @@ knowledge_metadata.json
 debug_*.py
 diagnose_*.py
 
+# Scripts de fine-tuning QLora (funcionalidad opcional/experimental)
+qlora_finetune.py
+
 # Documentación INTERNA de desarrollo (NO para público)
 FIXES_RAG_RESPONSES.md
 CAMBIOS_AGRESIVOS_GEMMA.md
 ANALISIS_PROYECTO.md
 MEJORAS_RESPUESTAS.md
 GITIGNORE_EXPLICADO.md
+
+# Documentación de funcionalidades no usadas
+README_QLoRA.md
 
 # Accesos directos Windows creados localmente
 *.lnk
