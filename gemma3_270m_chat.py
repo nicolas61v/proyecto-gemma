@@ -1,6 +1,6 @@
 """
-Chat Local con Gemma 3 270M Instruct - VERSIÓN CORREGIDA ✅
-Proyecto: Especialización SLM Gemma
+Gemma 3 270M Chat with RAG
+Local chatbot con búsqueda en documentos
 Autores: Felipe Castro Jaimes, Nicolás Vázquez, José Jiménez
 Universidad EAFIT, 2025
 """
@@ -37,7 +37,7 @@ except Exception:
     PdfReader = None
 
 # ====== CONFIGURACIÓN - GEMMA 3 270M INSTRUCT ======
-MODEL_NAME = "google/gemma-3-270m-it"  # ✅ VERSIÓN INSTRUCTION-TUNED (la correcta!)
+MODEL_NAME = "google/gemma-3-270m-it"  # Instruction-tuned version
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 # Path donde el usuario puede poner archivos de conocimiento (txt, md, jsonl, etc.)
@@ -48,17 +48,14 @@ EMBED_MODEL_NAME = "all-MiniLM-L6-v2"
 METADATA_PATH = os.path.join(os.path.dirname(__file__), "knowledge_metadata.json")
 
 print("="*60)
-print("🚀 CHAT LOCAL CON GEMMA 3 270M INSTRUCT")
-print("   Proyecto SLM - Universidad EAFIT 2025")
+print("Gemma 3 270M Chat")
 print("="*60)
-print(f"📱 Dispositivo: {DEVICE.upper()}")
-print(f"🔧 Modelo: {MODEL_NAME}")
-print("✅ Usando versión INSTRUCTION-TUNED (sigue instrucciones)")
+print(f"Dispositivo: {DEVICE.upper()}")
+print(f"Modelo: {MODEL_NAME}")
 print()
 
-# ====== CARGA DEL MODELO ======
-print(f"⏳ Cargando Gemma 3 270M Instruct...")
-print("   (Primera vez descargará ~241MB)")
+# Cargando modelo
+print("Cargando modelo...")
 print()
 
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
@@ -78,15 +75,13 @@ if DEVICE == "cpu":
 LORA_DIR = os.path.join(os.path.dirname(__file__), "lora_adapter")
 if PeftModel is not None and os.path.isdir(LORA_DIR):
     try:
-        print(f"⏳ Cargando adaptador LoRA desde {LORA_DIR}...")
+        print(f"Cargando adaptador LoRA desde {LORA_DIR}...")
         model = PeftModel.from_pretrained(model, LORA_DIR, device_map="auto" if DEVICE == "cuda" else None)
-        print("✅ Adaptador LoRA cargado correctamente.")
+        print("LoRA adapter cargado.")
     except Exception as e:
-        print("⚠️ No se pudo cargar el adaptador LoRA:", e)
-        print("Continuando con el modelo base...")
+        print("LoRA adapter no encontrado, continuando...")
 
-print("✅ ¡Gemma 3 270M Instruct cargado exitosamente!")
-print("✅ Este modelo SÍ sigue instrucciones correctamente")
+print("Modelo cargado exitosamente")
 print()
 
 
@@ -214,14 +209,22 @@ def save_uploaded_file(uploaded) -> str:
         return ""
 
 
-# ====== FUNCIÓN DE CHAT ======
+# ====== FUNCIÓN DE CHAT MEJORADA ======
 def chat_with_gemma(message, history, temperature, max_tokens):
     """
-    Función de chat con Gemma 3 270M Instruct
-    Usa el formato correcto para el modelo instruction-tuned
+    Chat mejorado con Gemma 3 270M Instruct
+    - System prompt para mejores respuestas
+    - RAG optimizado
+    - Parámetros de generación ajustados
     """
-    
-    # Recuperación de contexto local (RAG) usando FAISS + metadata (chunks)
+
+    # System prompt para guiar mejor el modelo
+    SYSTEM_PROMPT = """Eres un asistente útil y preciso.
+Responde de manera clara, concisa y coherente.
+Si no conoces la respuesta, di "No tengo información sobre eso" en lugar de inventar.
+Evita respuestas confusas o incoherentes."""
+
+    # Recuperación RAG mejorada
     context_text = ""
     if SentenceTransformer is not None and faiss is not None and np is not None:
         try:
@@ -229,85 +232,95 @@ def chat_with_gemma(message, history, temperature, max_tokens):
                 embed_model = SentenceTransformer(EMBED_MODEL_NAME)
                 index = faiss.read_index(FAISS_INDEX_PATH)
                 q_emb = embed_model.encode([message])
-                D, I = index.search(np.array(q_emb).astype('float32'), 3)
-                # cargar metadata (lista de fragments)
+                # Buscar top-2 documentos (más conservador)
+                D, I = index.search(np.array(q_emb).astype('float32'), 2)
                 with open(METADATA_PATH, 'r', encoding='utf-8') as f:
                     metadata = json.load(f)
-                for idx in I[0]:
-                    if idx < len(metadata):
+                # Solo incluir si la distancia es razonable
+                for dist, idx in zip(D[0], I[0]):
+                    if idx < len(metadata) and dist < 2.5:  # Threshold de relevancia
                         entry = metadata[idx]
-                        context_text += f"\n---\nSource: {entry.get('source','unknown')}\n{entry.get('text','')}\n"
+                        source = entry.get('source', 'unknown')
+                        text = entry.get('text', '')
+                        context_text += f"Fuente: {source}\n{text}\n\n"
         except Exception:
             context_text = ""
 
-    # Construir prompt en formato de chat simple
-    # Gemma 3 270M-it responde mejor con formato directo
+    # Construir prompt mejorado
+    prompt = f"{SYSTEM_PROMPT}\n\n"
+
+    # Agregar contexto RAG si está disponible
+    if context_text:
+        prompt += f"Información de referencia:\n{context_text}\n"
+
+    # Agregar historial limitado
     if len(history) > 0:
-        # Incluir últimos 3 intercambios para contexto
-        conversation = ""
-        for user_msg, bot_msg in history[-3:]:
-            conversation += f"User: {user_msg}\nAssistant: {bot_msg}\n"
-        # añadir contexto recuperado antes de la última consulta
-        if context_text:
-            conversation += f"Context:{context_text}\n"
-        conversation += f"User: {message}\nAssistant:"
-    else:
-        conversation = ""
-        if context_text:
-            conversation += f"Context:{context_text}\n"
-        conversation += f"User: {message}\nAssistant:"
-    
-    # Tokenizar
+        prompt += "Conversación anterior:\n"
+        for user_msg, bot_msg in history[-2:]:  # Solo últimos 2 intercambios
+            prompt += f"Usuario: {user_msg}\n"
+            prompt += f"Asistente: {bot_msg}\n"
+
+    # Agregar mensaje actual
+    prompt += f"\nUsuario: {message}\n"
+    prompt += "Asistente:"
+
+    # Tokenizar con truncation cuidadosa
     inputs = tokenizer(
-        conversation, 
+        prompt,
         return_tensors="pt",
         truncation=True,
-        max_length=1024
+        max_length=768
     ).to(DEVICE)
-    
-    # Generar respuesta
+
+    # Parámetros de generación optimizados para coherencia
     with torch.no_grad():
         outputs = model.generate(
             **inputs,
-            max_new_tokens=max_tokens,
-            temperature=temperature,
-            do_sample=temperature > 0.1,
-            top_p=0.95,
-            top_k=50,
+            max_new_tokens=min(max_tokens, 200),  # Limitar para respuestas coherentes
+            temperature=min(temperature, 0.6),     # Reducir por defecto para coherencia
+            do_sample=True,
+            top_p=0.9,                             # Más restrictivo
+            top_k=40,                              # Más restrictivo
             pad_token_id=tokenizer.eos_token_id,
             eos_token_id=tokenizer.eos_token_id,
-            repetition_penalty=1.1
+            repetition_penalty=1.2,                # Evitar repeticiones
+            no_repeat_ngram_size=3                 # No repetir 3-gramas
         )
-    
-    # Decodificar
+
+    # Decodificar respuesta
     full_response = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    
-    # Extraer solo la respuesta del asistente
-    if "Assistant:" in full_response:
-        response = full_response.split("Assistant:")[-1].strip()
+
+    # Extraer solo la parte del asistente
+    if "Asistente:" in full_response:
+        response = full_response.split("Asistente:")[-1].strip()
     else:
-        response = full_response[len(conversation):].strip()
-    
-    # Limpiar respuesta (quitar posibles "User:" que aparezcan)
-    if "User:" in response:
-        response = response.split("User:")[0].strip()
-    
+        response = full_response[len(prompt):].strip()
+
+    # Limpiar (quitar "Usuario:" si aparece)
+    if "Usuario:" in response:
+        response = response.split("Usuario:")[0].strip()
+
+    # Validación básica: si la respuesta es muy corta o vacía, dar respuesta por defecto
+    if not response or len(response) < 5:
+        response = "No pude generar una respuesta coherente. Intenta reformular tu pregunta."
+
+    # Limitar a 500 caracteres para evitar respuestas demasiado largas
+    if len(response) > 500:
+        response = response[:500] + "..."
+
     return response
 
 # ====== INTERFAZ GRADIO ======
 with gr.Blocks(
-    title="Chat Gemma 3 270M Instruct 💬",
-    theme=gr.themes.Soft(primary_hue="blue")
+    title="Gemma Chat",
+    theme=gr.themes.Default()
 ) as demo:
-    
+
     gr.Markdown(
         """
-        # 🤖 Chat Local con Gemma 3 270M Instruct
-        ### Proyecto de Especialización SLM - Universidad EAFIT 2025
-        
-        ✅ **Versión CORREGIDA** - Usando modelo **instruction-tuned** que SÍ sigue instrucciones correctamente.
-        
-        **Modelo**: `google/gemma-3-270m-it` (instruction-tuned)
+        # Gemma 3 270M Chat
+
+        Chatbot local con búsqueda en documentos (RAG)
         """
     )
     
@@ -316,84 +329,76 @@ with gr.Blocks(
             chatbot = gr.Chatbot(
                 height=500,
                 show_label=False,
-                avatar_images=("👤", "🤖"),
                 bubble_full_width=False
             )
-            # Área para subir archivos al índice de conocimiento
+
             with gr.Row():
-                file_input = gr.File(label="Subir archivo (txt, md, pdf)")
-                upload_btn = gr.Button("📥 Subir e indexar")
+                file_input = gr.File(label="Archivo (txt, md, pdf)")
+                upload_btn = gr.Button("Indexar", scale=1)
             index_status = gr.Markdown(visible=True)
-            
+
             with gr.Row():
                 msg = gr.Textbox(
-                    placeholder="Escribe tu mensaje aquí...",
+                    placeholder="Escribe tu pregunta...",
                     show_label=False,
                     scale=9,
                     container=False
                 )
-                send_btn = gr.Button("Enviar 📤", scale=1, variant="primary")
-            
+                send_btn = gr.Button("Enviar", scale=1, variant="primary")
+
             with gr.Row():
-                clear_btn = gr.Button("🗑️ Limpiar Chat", scale=1)
-                retry_btn = gr.Button("🔄 Reintentar", scale=1)
+                clear_btn = gr.Button("Limpiar", scale=1)
+                retry_btn = gr.Button("Reintentar", scale=1)
         
         with gr.Column(scale=1):
-            gr.Markdown("### ⚙️ Configuración")
-            
+            gr.Markdown("### Configuración")
+
             temperature = gr.Slider(
                 minimum=0.1,
-                maximum=1.0,
-                value=0.7,
+                maximum=0.9,
+                value=0.4,
                 step=0.1,
-                label="🌡️ Temperatura",
-                info="Creatividad de las respuestas"
+                label="Temperatura",
+                info="0.1=consistente, 0.9=creativo"
             )
-            
+
             max_tokens = gr.Slider(
                 minimum=50,
-                maximum=300,
-                value=150,
+                maximum=200,
+                value=120,
                 step=25,
-                label="📏 Tokens Máximos",
-                info="Longitud de la respuesta"
+                label="Tokens",
+                info="Longitud máxima (recomendado 100-150)"
             )
-            
+
             gr.Markdown(
                 f"""
+                ### Sistema
+
+                **Modelo**: Gemma 3 270M
+                **Dispositivo**: {DEVICE.upper()}
+                **RAG**: Habilitado
+
                 ---
-                ### 📊 Info del Sistema
-                - **Modelo**: Gemma 3 270M **Instruct** ✅
-                - **Tipo**: Instruction-Tuned
-                - **Dispositivo**: {DEVICE.upper()}
-                - **Estado**: 🟢 Activo
-                
-                ---
-                ### 💡 Diferencia con Pre-trained
-                
-                **Instruction-Tuned (IT)** ✅:
-                - Sigue instrucciones
-                - Responde preguntas coherentemente
-                - Formato de chat
-                
-                **Pre-trained (PT)** ❌:
-                - Solo continúa texto
-                - No sigue instrucciones
-                - Genera texto random
+
+                **Consejos:**
+                - Sube PDFs para búsqueda
+                - Ajusta temperatura para más/menos creatividad
+                - Presiona Enter o click en Enviar
                 """
             )
     
-    # Ejemplos mejorados
+    # Ejemplos
     gr.Examples(
         examples=[
             "Hola, ¿cómo estás?",
             "¿Qué es la inteligencia artificial?",
             "Explícame qué es un transformer",
-            "Dame 3 ventajas de los modelos pequeños",
+            "Ventajas de los modelos pequeños",
             "¿Cómo funciona el fine-tuning?"
         ],
         inputs=msg,
-        label="💬 Preguntas de ejemplo"
+        label="Ejemplos"
     )
     
     # ====== EVENTOS ======
@@ -455,17 +460,14 @@ with gr.Blocks(
         outputs=chatbot
     )
 
-# ====== LANZAR APLICACIÓN ======
+# Lanzar interfaz
 if __name__ == "__main__":
     print("="*60)
-    print("🌐 Abriendo interfaz web en http://127.0.0.1:7860")
+    print("Iniciando servidor web")
+    print("URL: http://127.0.0.1:7860")
     print("="*60)
     print()
-    print("💡 NOTA IMPORTANTE:")
-    print("   Ahora usando modelo INSTRUCTION-TUNED")
-    print("   Las respuestas serán coherentes ✅")
-    print()
-    
+
     demo.launch(
         server_name="127.0.0.1",
         server_port=7860,
