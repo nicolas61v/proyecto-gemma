@@ -86,3 +86,33 @@ knowledge_metadata.json
 
 # Claude Code
 .claude/
+
+# ============================================
+# ARCHIVOS DE USO INTERNO (desarrollo/debug)
+# ============================================
+
+# Scripts de debugging y diagnóstico internos
+debug_*.py
+diagnose_*.py
+
+# Documentación interna de desarrollo y arreglos
+FIXES_RAG_RESPONSES.md
+CAMBIOS_AGRESIVOS_GEMMA.md
+ANALISIS_PROYECTO.md
+MEJORAS_RESPUESTAS.md
+
+# Accesos directos Windows creados localmente (opcional)
+# *.lnk  (ya está arriba pero aquí por claridad)
+
+# Archivos de caché/estado local
+*.pkl
+*.pickle
+*.joblib
+
+# Notebooks de Jupyter (si los creas localmente)
+.ipynb_checkpoints/
+*.ipynb_checkpoints/
+
+# Archivos de LLaMA/modelos que se descargan localmente
+lora_adapter/
+*.gguf

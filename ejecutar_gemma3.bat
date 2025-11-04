@@ -3,6 +3,18 @@ echo ========================================
 echo    CHAT GEMMA 3 270M - Universidad EAFIT
 echo ========================================
 echo.
+
+REM Verificar que venv existe
+if not exist "venv\Scripts\activate.bat" (
+    echo [ERROR] Entorno virtual no encontrado!
+    echo.
+    echo Por favor ejecuta primero:
+    echo    instalar_windows_gemma3.bat
+    echo.
+    pause
+    exit /b 1
+)
+
 echo Iniciando aplicacion con el modelo CORRECTO...
 echo.
 echo GEMMA 3 270M - Ventajas:
@@ -19,6 +31,12 @@ echo ========================================
 echo.
 
 call venv\Scripts\activate.bat
+if errorlevel 1 (
+    echo [ERROR] No se pudo activar el entorno virtual
+    pause
+    exit /b 1
+)
+
 python gemma3_270m_chat.py
 
 pause

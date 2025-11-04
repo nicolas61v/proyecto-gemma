@@ -218,13 +218,12 @@ def chat_with_gemma(message, history, temperature, max_tokens):
     - Parámetros de generación ajustados
     """
 
-    # System prompt para guiar mejor el modelo
-    SYSTEM_PROMPT = """Eres un asistente útil y preciso.
-Responde de manera clara, concisa y coherente.
-Si no conoces la respuesta, di "No tengo información sobre eso" en lugar de inventar.
-Evita respuestas confusas o incoherentes."""
+    # System prompt SIMPLE para Gemma 3
+    SYSTEM_PROMPT = """Eres un asistente inteligente.
+Responde siempre de manera clara y directa.
+Usa la información disponible para responder."""
 
-    # Recuperación RAG mejorada
+    # Recuperación RAG mejorada - Más agresivo
     context_text = ""
     if SentenceTransformer is not None and faiss is not None and np is not None:
         try:
@@ -232,40 +231,33 @@ Evita respuestas confusas o incoherentes."""
                 embed_model = SentenceTransformer(EMBED_MODEL_NAME)
                 index = faiss.read_index(FAISS_INDEX_PATH)
                 q_emb = embed_model.encode([message])
-                # Buscar top-3 documentos (menos conservador)
-                D, I = index.search(np.array(q_emb).astype('float32'), 3)
+                # Buscar top-2 documentos
+                D, I = index.search(np.array(q_emb).astype('float32'), 2)
                 with open(METADATA_PATH, 'r', encoding='utf-8') as f:
                     metadata = json.load(f)
-                # Incluir resultados con distancia más permisiva
+                # Incluir TODOS los resultados relevantes (muy permisivo)
                 for dist, idx in zip(D[0], I[0]):
-                    if idx < len(metadata) and dist < 3.0:  # Threshold aumentado a 3.0
+                    if idx < len(metadata):
                         entry = metadata[idx]
-                        source = entry.get('source', 'unknown')
                         text = entry.get('text', '')
-                        context_text += f"Fuente: {source}\n{text}\n\n"
+                        # Limitar tamaño de cada chunk para evitar que sea muy largo
+                        text = text[:300]  # Máximo 300 chars por chunk
+                        context_text += f"{text}\n"
         except Exception:
             context_text = ""
 
-    # Construir prompt mejorado
+    # Construir prompt SIMPLE y CORTO
     prompt = f"{SYSTEM_PROMPT}\n\n"
 
-    # Agregar contexto RAG si está disponible
+    # Agregar SOLO el contexto RAG más relevante (sin explicaciones extra)
     if context_text:
-        prompt += f"INFORMACIÓN DE REFERENCIA RELEVANTE:\n{context_text}\n"
-        prompt += "Usa la información anterior para responder la pregunta del usuario.\n\n"
-    else:
-        prompt += "No hay documentos disponibles para consultar.\n\n"
+        prompt += f"Información:\n{context_text}\n"
 
-    # Agregar historial limitado
-    if len(history) > 0:
-        prompt += "CONVERSACIÓN ANTERIOR:\n"
-        for user_msg, bot_msg in history[-2:]:  # Solo últimos 2 intercambios
-            prompt += f"Usuario: {user_msg}\n"
-            prompt += f"Asistente: {bot_msg}\n"
-        prompt += "\n"
+    # NO agregar historial para mantener prompt corto
+    # (Historial cansa al modelo pequeño)
 
     # Agregar mensaje actual
-    prompt += f"Usuario: {message}\nAsistente:"
+    prompt += f"Pregunta: {message}\n\nRespuesta:"
 
     # Tokenizar con truncation cuidadosa
     inputs = tokenizer(
@@ -275,57 +267,81 @@ Evita respuestas confusas o incoherentes."""
         max_length=768
     ).to(DEVICE)
 
-    # Parámetros de generación optimizados para coherencia
+    # Parámetros de generación AGRESIVOS para forzar respuestas
     with torch.no_grad():
         outputs = model.generate(
             **inputs,
-            max_new_tokens=min(max_tokens, 250),  # Permitir respuestas más largas
-            temperature=min(temperature, 0.5),    # Reducir para mayor consistencia
+            max_new_tokens=min(max_tokens, 300),  # Respuestas más largas
+            temperature=min(temperature, 0.6),    # Balance entre creatividad y coherencia
             do_sample=True,
-            top_p=0.85,                           # Slightly más restrictivo
-            top_k=30,                             # Más restrictivo que antes
+            top_p=0.88,                           # Moderado
+            top_k=40,                             # Moderado
             pad_token_id=tokenizer.eos_token_id,
             eos_token_id=tokenizer.eos_token_id,
-            repetition_penalty=1.1,               # Ligero penalty
-            no_repeat_ngram_size=2,               # No repetir bigramas
-            length_penalty=1.0                    # Neutral en longitud
+            repetition_penalty=1.3,               # FUERTE para evitar repeticiones
+            no_repeat_ngram_size=3                # Evitar 3-gramas repetidos
         )
 
     # Decodificar respuesta
     full_response = tokenizer.decode(outputs[0], skip_special_tokens=True)
 
-    # Extraer solo la parte del asistente
-    if "Asistente:" in full_response:
-        response = full_response.split("Asistente:")[-1].strip()
+    # Extraer la respuesta DESPUÉS del prompt
+    # El modelo responde después de "Respuesta:"
+    if "Respuesta:" in full_response:
+        response = full_response.split("Respuesta:")[-1].strip()
     else:
+        # Fallback: tomar todo después del prompt original
         response = full_response[len(prompt):].strip()
 
-    # Limpiar (quitar "Usuario:" o referencias a sistema si aparecen)
-    if "Usuario:" in response:
-        response = response.split("Usuario:")[0].strip()
+    # Limpiar respuestas truncadas o mal formadas
+    # Quitar cualquier cosa que pare en mitad de oración
+    if "Pregunta:" in response:
+        response = response.split("Pregunta:")[0].strip()
+    if "Información:" in response:
+        response = response.split("Información:")[0].strip()
 
-    # Quitar prompts residuales
-    for phrase in ["INFORMACIÓN DE REFERENCIA", "CONVERSACIÓN ANTERIOR", "Asistente:", "[INST]", "[/INST]"]:
-        if phrase in response:
-            response = response.split(phrase)[0].strip()
+    # Limpieza básica
+    response = response.strip()
 
-    # Limpieza de espacios múltiples
-    response = " ".join(response.split())
+    # Detectar y limpiar repeticiones excesivas
+    lineas = response.split('\n')
+    lineas_limpias = []
+    ultima_linea = ""
 
-    # Validación: respuesta debe ser significativa
-    if not response or len(response.strip()) < 5:
+    for linea in lineas:
+        linea = linea.strip()
+        # Si la línea es muy similar a la anterior (>80% coincidencia), skip
+        if linea and ultima_linea:
+            coincidencias = sum(1 for a, b in zip(linea, ultima_linea) if a == b)
+            similitud = coincidencias / len(ultima_linea)
+            if similitud < 0.8:  # Si no es casi idéntica, agregar
+                lineas_limpias.append(linea)
+                ultima_linea = linea
+        elif linea:
+            lineas_limpias.append(linea)
+            ultima_linea = linea
+
+    response = " ".join(lineas_limpias)
+
+    # Si la respuesta es vacía o muy corta, intentar recuperarla del contexto
+    if len(response) < 5:
+        # Si tenemos contexto pero no generó respuesta, tomar del contexto
         if context_text:
-            response = "Lo siento, no pude generar una respuesta basada en los documentos disponibles. Intenta con una pregunta más específica."
+            # Extraer primera oración del contexto como respuesta
+            primera_linea = context_text.split('\n')[0][:250]
+            response = f"Basándome en la información disponible: {primera_linea}"
         else:
-            response = "No tengo documentos cargados para responder. Por favor, carga un PDF usando el botón 'Indexar'."
-    elif any(phrase in response.lower() for phrase in ["no tengo información", "no sé", "no disponible"]):
-        # Detectar cuando el modelo dice que no sabe
-        if context_text:
-            response = "Disculpa, aunque tengo información relacionada, no puedo formular una respuesta clara. Intenta reformular tu pregunta."
+            response = "No tengo información disponible para responder. Por favor, carga un PDF."
 
-    # Limitar a 600 caracteres para respuestas más completas
-    if len(response) > 600:
-        response = response[:600].rsplit(" ", 1)[0] + "..."
+    # Limitar a 800 caracteres máximo (más permisivo)
+    if len(response) > 800:
+        # Cortar en la última oración completa
+        response = response[:800]
+        # Encontrar último punto, signo de exclamación o interrogación
+        for char in '.!?':
+            if char in response:
+                response = response.rsplit(char, 1)[0] + char
+                break
 
     return response
 
