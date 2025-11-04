@@ -107,6 +107,7 @@ qlora_finetune.py
 # Scripts de indexación redundantes (la UI ya lo hace)
 build_index.py
 index_knowledge.py
+test_rag.py
 
 # Documentación INTERNA de desarrollo (NO para público)
 FIXES_RAG_RESPONSES.md
